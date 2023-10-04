@@ -1,0 +1,65 @@
+import machine
+import dht
+import network
+import urequests
+import time
+
+# Pins configuration
+SOIL_TEMP_PIN = 15
+WATER_LEVEL_PIN = 25
+DHT_PIN = 34
+
+# Connect to Wi-Fi
+WIFI_SSID = "bps_explore"
+WIFI_PASSWORD = "Sagabps@235"
+
+def connect_wifi(ssid, password):
+    sta_if = network.WLAN(network.STA_IF)
+    if not sta_if.isconnected():
+        print("Connecting to WiFi...")
+        sta_if.active(True)
+        sta_if.connect(ssid, password)
+        while not sta_if.isconnected():
+            pass
+    print("WiFi Connected")
+    print("IP Address:", sta_if.ifconfig()[0])
+
+# Initialize DHT sensor
+dht_sensor = dht.DHT22(machine.Pin(DHT_PIN))
+
+# Read sensor data
+def read_sensors():
+    dht_sensor.measure()
+    temp_celsius = dht_sensor.temperature()
+    humidity = dht_sensor.humidity()
+
+    adc_soil_temp = machine.ADC(machine.Pin(SOIL_TEMP_PIN))
+    soil_temp = adc_soil_temp.read()
+
+    adc_water_level = machine.ADC(machine.Pin(WATER_LEVEL_PIN))
+    water_level = adc_water_level.read()
+
+    return temp_celsius, humidity, soil_temp, water_level
+
+# Main loop
+def main():
+    connect_wifi(WIFI_SSID, WIFI_PASSWORD)
+
+    while True:
+        temp_celsius, humidity, soil_temp, water_level = read_sensors()
+
+        # Send sensor data to a web server
+        payload = {
+            "temp_celsius": temp_celsius,
+            "humidity": humidity,
+            "soil_temp": soil_temp,
+            "water_level": water_level,
+        }
+        response = urequests.post("http://your_server_endpoint", json=payload)
+        print("Sensor data sent:", response.text)
+        response.close()
+
+        time.sleep(300)  # Wait for 5 minutes before taking readings again
+
+if __name__ == "__main__":
+    main()

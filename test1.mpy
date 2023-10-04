@@ -1,0 +1,94 @@
+import network
+import machine
+import utime
+from utime import sleep_ms
+import time
+import dht
+from machine import ADC
+from machine import Pin
+import socket
+import onewire
+import ds18x20
+
+import esp
+esp.osdebug(None)
+
+import gc
+gc.collect()
+
+# WiFi settings
+WIFI_SSID = "bps_explore"
+WIFI_PASSWORD = "Sagabps@235"
+
+# Pin connections
+ds_pin = machine.Pin(15)
+
+
+WATER_LEVEL_PIN = 25  # Example pin number
+DHT_PIN = 32  # Example pin number
+
+dht_sensor = dht.DHT11(Pin(DHT_PIN))
+water_level_sensor = ADC(Pin(WATER_LEVEL_PIN))
+ds_sensor = ds18x20.DS18X20(onewire.OneWire(ds_pin))
+
+roms = ds_sensor.scan()
+print('Found DS devices: ', roms)
+
+
+def connect_to_wifi():
+    sta_if = network.WLAN(network.STA_IF)
+    if not sta_if.isconnected():
+        print("Connecting to WiFi...")
+        sta_if.active(True)
+        sta_if.connect(WIFI_SSID, WIFI_PASSWORD)
+        while not sta_if.isconnected():
+            pass
+    print("Connected to WiFi:", sta_if.ifconfig())
+
+def web_page():
+    html = """<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="0.1">
+    <h1>Plant Monitor</h1>
+    <p>Temperature: {} C</p><span class="sensor">""" + str(o)  + """Km\hr</span></td></tr>
+    <p>Humidity: {} %</p><span class="sensor">""" + str(o)  + """Km\hr</span></td></tr>
+    <p>Water Level: {}</p><span class="sensor">""" + str(o)  + """Km\hr</span></td></tr>
+    <p>Soil Temperature: {}</p><span class="sensor">""" + str(o)  + """Km\hr</span></td></tr>
+    </body></html>"""
+    return html
+
+s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', 80))
+s.listen(5)
+
+
+
+while True:
+    if gc.mem_free() < 102000:
+        gc.collect()
+    global dt,dh,st
+    dht_sensor.measure()
+    dt=dht_sensor.temperature()
+    dh=dht_sensor.humidity()
+    ds_sensor.convert_temp()
+    time.sleep_ms(750)
+    for rom in roms:
+        print(ds_sensor.read_temp(rom))
+        # return ds_sensor.read_temp(rom)
+    st=ds_sensor.read_temp(rom)
+
+
+    conn, addr = s.accept()
+    conn.settimeout(3.0)
+    print('Got a connection from %s' % str(addr))
+    request = conn.recv(1024)
+    conn.settimeout(None)
+    request = str(request)
+    print('Content = %s' % request)
+    print("HI")
+    sleep_ms(200)
+    response = web_page()
+    conn.send('HTTP/1.1 200 OK\n')
+    conn.send('Content-Type: text/html\n')
+    conn.send('Connection: close\n\n')
+    conn.sendall(response)
+    conn.close()
